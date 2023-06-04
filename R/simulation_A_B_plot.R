@@ -1,4 +1,38 @@
+library(simulacr)
+library(outbreaker2)
+library(furrr)
+library(tidyverse)
+source("R/params.R")
+dir <- paste0("Data/", "2023-05-30", "/")
+dir.create(path = dir)
 
+#simulacr simulations
+sim_list <- readRDS(paste0(dir, "sim_list.RData"))
+sim_si <- bind_rows(sim_list, .id = "household")
+
+sim_mean_si <- tibble(
+  mean = mean(sim_si$si, na.rm = TRUE),
+  lwr = quantile(sim_si$si, probs = 0.025, na.rm = TRUE),
+  upr = quantile(sim_si$si, probs = 0.975, na.rm = TRUE) 
+)
+
+
+#misspecified reconstructions: simulationB
+offset_data <- readRDS(paste0(dir, "simulationB_offset_data.RData"))
+
+#no misspecified (NULL): simulationA
+o2_mean_si <- readRDS(paste0(dir, "simulationA_data.RData")) %>% 
+  group_by(LHS) %>% 
+  summarise(serial_interval = list(serial_interval)) %>% 
+  mutate(mean_si = map(serial_interval, mean, na.rm = TRUE )) %>% 
+  select(mean_si) %>%
+  unnest(cols = c(mean_si)) 
+o2_cri <- o2_mean_si %>% summarise(mean = mean(mean_si),
+                                   lwr = quantile(mean_si, 0.025),
+                                   upr = quantile(mean_si, 0.975))
+
+
+# OVERALL RESULTS ---------------------------------------------------------
 
 offset_mean_si <- offset_data %>% 
   group_by(parameter, moment, LHS) %>% 
@@ -16,11 +50,11 @@ offset_cri <- offset_mean_si %>% summarise(mean = mean(mean_si),
   mutate(parameter = case_when(parameter == "gt" ~ "generation time",
                                parameter == "incub" ~ "incubation period"))
 
-offset_mean_si <- offset_mean_si%>% 
+offset_mean_si <- offset_mean_si %>% 
   mutate(parameter = case_when(parameter == "gt" ~ "generation time",
                                parameter == "incub" ~ "incubation period"))
 
-pB <- 
+p <- 
   ggplot() +
   #outbreaker2
   geom_density(data = offset_mean_si,
@@ -63,27 +97,6 @@ pB <-
        y = "Density",
        colour = "Method")+
   theme(legend.position = "top")
-# +
-#   theme(
-#     panel.spacing = unit(0, "lines"),
-#     strip.placement = "outside",
-#     #strip.background = element_blank(),
-#     strip.text.x = element_text(size = 11, 
-#                                 family = "Open Sans",
-#                                 face = "bold", 
-#                                 color = "black", 
-#                                 angle = 0, 
-#                                 vjust = 0.5, 
-#                                 hjust = 0.5),
-#     strip.text.y = element_text(size = 10, 
-#                                 family = "Open Sans",
-#                                 face = "bold", 
-#                                 color = "black"),
-#     panel.border = element_rect(color = "black", fill = NA, size = 0.5),
-#     panel.background = element_rect(fill = NA, color = NA),
-#     legend.position = "top",
-#     plot.margin = unit(c(1,1,1,3), "lines")
-#   )
 
 
-pB
+p
